@@ -11,9 +11,11 @@
 (import ctypes [sizeof c_void_p c_float])
 (import json)
 (import glm [mat4
-             identity
+             vec3
+             identity :as idmat
+             radians
+             perspective
              lookAt :as lookat])
-
 
 (defn debug-callback [source msg_type msg_id severity length raw user]
   (print "debug" source msg_type msg_id severity (cut raw 0 length)))
@@ -53,15 +55,22 @@
    (with [atlas (open (+ fileprefix ".json"))]
      (json.load atlas))])
 
+(defn parse-tex-coords [iw ih x y w h]
+  "Given frame description values, return texcoords normalized to [0.0 1.0]"
+  [(/ x iw) (/ y ih) (/ (+ x w) iw) (/ (+ y h) ih)])
+
 (defn parse-atlas [atlas]
   "Parse atlas into texcoords array and texnames array"
-  (setv+ {w "w" h "h"} (get (get atlas "meta") "size"))
-  (let [zipped ; extract info for both lists in one iteration
+  (setv+ {iw "w" ih "h"} (get (get atlas "meta") "size"))
+  (let [zipped ; extract info for both lists in one pass
         (lfor key (get atlas "frames")
               :setv frame (get (get (get atlas "frames") key) "frame")
               #(key [(get frame "x") (get frame "y") (get frame "w") (get frame "h")]))]
-    (setv [texnames texcoords] (zip #* zipped)) ; unzip tuples
-    [(list texcoords) (list texnames)]))
+    (setv [texnames frameinfo] (zip #* zipped)) ; unzip tuples
+    [(lfor frame (list frameinfo)
+           :setv [x y w h] frame
+           (parse-tex-coords iw ih x y w h))
+     (list texnames)]))
 
 (defn shader-load [vertfile fragfile]
   "Takes two filenames and returns a compiled shaderid"
@@ -114,7 +123,7 @@
 (setv texcoords (array texcoords))
 (setv initial-tex-idxs (array [0 1]))
 (setv initial-colors (array [[0.9 0.3 0.3 1.0] [0.9 0.3 0.3 1.0]]))
-(setv initial-models (array [(array (identity mat4)) (array (identity mat4))]))
+(setv initial-models (array [(array (idmat mat4)) (array (idmat mat4))]))
 
 (defn make-vao [shader]
   (setv vao (glGenVertexArrays 1))
@@ -124,9 +133,9 @@
   (setv tex-coord-vbo (vbo.VBO texcoords)) ; fixed per tex atlas
   (setv tex-coord-loc (set-up-buffer tex-coord-vbo shader "texCoord" 4))
   (setv tex-index-vbo (vbo.VBO initial-tex-idxs)) ; varies
-  (setv tex-index-loc (set-up-buffer tex-index-vbo shader "texIndex" 4 1 GL_INT))
+  (setv tex-index-loc (set-up-buffer tex-index-vbo shader "texIndex" 1 1 GL_INT))
   (setv colors-vbo (vbo.VBO initial-colors)) ; varies
-  (setv colors-loc (set-up-buffer colors-vbo shader "colors" 1 GL_FLOAT 4))
+  (setv colors-loc (set-up-buffer colors-vbo shader "colors" 4 1 GL_FLOAT))
   (setv models-vbo (vbo.VBO initial-models)) ; varies
   (setv models-loc (set-up-matrix models-vbo shader "model" 1)) ; naisu desu ne
   [vao
@@ -134,7 +143,7 @@
    tex-coord-vbo tex-coord-loc
    tex-index-vbo tex-index-loc
    colors-vbo colors-loc
-   models-vbo models-locs])
+   models-vbo models-loc])
 
 (defn main []
   "夜露死苦"
@@ -150,8 +159,15 @@
          tex-coord-vbo tex-coord-loc
          tex-index-vbo tex-index-loc
          colors-vbo colors-loc
-         models-vbo models-locs] (make-vao shader))
+         models-vbo models-loc] (make-vao shader))
   (setv time (timer))
+  (setv target (vec3 0.0))
+  (setv position (vec3 0.0 0.0 3.0))
+  (setv projection (perspective (radians 60.0) (/ 16.0 9.0) 0.1 100.0))
+  (setv view (lookat position target (vec3 0.0 1.0 0.0)))
+  (setv view-projection (* projection view))
+  (setv view-proj-loc (glGetUniformLocation shader "viewProjection"))
+  (setv texs-loc (glGetUniformLocation shader "texs"))
   (while True
     (lfor event (pg.event.get)
           (dispatch event))
