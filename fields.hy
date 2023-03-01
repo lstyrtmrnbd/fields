@@ -86,7 +86,7 @@
                      location-size
                      [divisor 0]
                      [gl-type GL_FLOAT]]
-  "Give basics to establish attribute, fill buffer, and return location"
+  "Give basics to establish attribute, fill buffer, and return location in shader"
   (with [vbo]
     (let [location (glGetAttribLocation shader location-name)]
       (glEnableVertexAttribArray location)
@@ -116,6 +116,14 @@
                    [ 1.0  1.0 0.0]
                    [-1.0  1.0 0.0]]))
 
+; indices into texcoord array
+(setv texindices (array [[0 1]
+                         [0 3]
+                         [2 3]
+                         [2 3]
+                         [2 1]
+                         [0 1]]))
+
 (setv DEFAULT_TEX "texpck/texpck0")
 (setv [texid atlas] (tex-atlas-load DEFAULT_TEX))
 (setv [texcoords texnames] (parse-atlas atlas))
@@ -128,15 +136,18 @@
 (defn make-vao [shader]
   (setv vao (glGenVertexArrays 1))
   (glBindVertexArray vao)
-  (setv pos-vbo (vbo.VBO quad)) ; fixed forever
+  (setv pos-vbo (vbo.VBO quad)) ; verts
   (setv pos-loc (set-up-buffer pos-vbo shader "position" 4))
-  (setv tex-coord-vbo (vbo.VBO texcoords)) ; fixed per tex atlas
-  (setv tex-coord-loc (set-up-buffer tex-coord-vbo shader "texCoord" 4))
-  (setv tex-index-vbo (vbo.VBO initial-tex-idxs)) ; varies
-  (setv tex-index-loc (set-up-buffer tex-index-vbo shader "texIndex" 1 1 GL_INT))
-  (setv colors-vbo (vbo.VBO initial-colors)) ; varies
+  (setv idx-vbo (vbo.VBO texindices)); idx into single texcoord array
+  (setv idx-loc (set-up-buffer idx-vbo shader "texIdx" 2 0 GL_INT))
+  ;; this needs to go in a texture and get texelfetched in vtx shader
+  ;; (setv tex-coord-vbo (vbo.VBO texcoords)) ; all texcoords per atlas
+  ;; (setv tex-coord-loc (set-up-buffer tex-coord-vbo shader "atlasCoords" 4))
+  (setv tex-index-vbo (vbo.VBO initial-tex-idxs)) ; idx into atlas
+  (setv tex-index-loc (set-up-buffer tex-index-vbo shader "atlasIdx" 1 1 GL_INT))
+  (setv colors-vbo (vbo.VBO initial-colors)) ; funny color
   (setv colors-loc (set-up-buffer colors-vbo shader "colors" 4 1 GL_FLOAT))
-  (setv models-vbo (vbo.VBO initial-models)) ; varies
+  (setv models-vbo (vbo.VBO initial-models)) ; model matrices
   (setv models-loc (set-up-matrix models-vbo shader "model" 1)) ; naisu desu ne
   [vao
    pos-vbo pos-loc
